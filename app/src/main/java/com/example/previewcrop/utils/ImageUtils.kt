@@ -13,6 +13,7 @@ import android.graphics.ImageFormat
 import android.graphics.Matrix
 import android.graphics.Rect
 import android.media.Image
+import android.util.Log
 import androidx.annotation.ColorInt
 
 /**

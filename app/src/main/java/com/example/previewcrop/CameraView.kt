@@ -1,12 +1,8 @@
 package com.example.previewcrop
 
-import android.Manifest
-import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Typeface
-import android.net.Uri
-import android.util.Log
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -18,8 +14,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -37,20 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import com.example.previewcrop.utils.ImageUtils
-import com.example.previewcrop.utils.PermissionView
-import com.example.previewcrop.utils.openSettingsPermission
-import com.google.accompanist.permissions.ExperimentalPermissionsApi
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
-import java.text.SimpleDateFormat
-import java.util.*
-import java.util.concurrent.Executor
-import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
-import kotlin.math.roundToInt
 
 
 /*
@@ -61,11 +43,7 @@ import kotlin.math.roundToInt
  */
 
 
-// We only need to analyze the part of the image that has text, so we set crop percentages
-// to avoid analyze the entire image from the live camera feed.
-// 裁剪区域 比例
-val cropTopLeftScale: Offset = Offset(x = 0.025f, y = 0.3f)
-val cropSizeScale: Size = Size(width = 0.95f, height = 0.1f)
+
 
 
 // https://stackoverflow.com/a/70302763
@@ -74,11 +52,10 @@ fun CameraView(
     modifier: Modifier = Modifier,
     preview: Preview,
     imageCapture: ImageCapture? = null,
-    imageAnalysis: ImageAnalysis? = null,
     cameraSelector: CameraSelector = CameraSelector.DEFAULT_BACK_CAMERA,
     scaleType: PreviewView.ScaleType = PreviewView.ScaleType.FILL_CENTER,
-    enableTorch: Boolean = false,
-    focusOnTap: Boolean = false
+    enableTorchProvider: () -> Boolean = { false },
+    focusOnTap: Boolean = true
 ) {
 
     val context = LocalContext.current
@@ -97,7 +74,8 @@ fun CameraView(
             it.bindToLifecycle(
                 lifecycleOwner,
                 cameraSelector,
-                *listOfNotNull(preview, imageAnalysis, imageCapture).toTypedArray()
+                //*listOfNotNull(preview, imageAnalysis, imageCapture).toTypedArray()
+                *listOfNotNull(preview, imageCapture).toTypedArray()
             )
         }
     }
@@ -109,10 +87,10 @@ fun CameraView(
     }
 
 
-    LaunchedEffect(camera, enableTorch) {
+    LaunchedEffect(camera, enableTorchProvider()) {
         camera?.let {
             if (it.cameraInfo.hasFlashUnit()) {
-                it.cameraControl.enableTorch(context, enableTorch)
+                it.cameraControl.enableTorch(context, enableTorchProvider())
             }
         }
     }
@@ -149,8 +127,6 @@ fun CameraView(
                 }
             },
     )
-
-
 }
 
 
@@ -162,8 +138,8 @@ fun CameraView(
  */
 @Composable
 fun DrawCropScan(
-    topLeftScale: Offset = cropTopLeftScale,
-    sizeScale: Size = cropSizeScale,
+    topLeftScaleProvider: () -> Offset,
+    sizeScaleProvider: () -> Size,
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
 
@@ -202,19 +178,19 @@ fun DrawCropScan(
 
 
         // 扫描框 高度、宽度
-        var height = size.height * sizeScale.height
-        var with = size.width * sizeScale.width
+        var height = size.height * sizeScaleProvider().height
+        var with = size.width * sizeScaleProvider().width
 
         // square 方形
-        if (sizeScale.height == 0f) {
+        if (sizeScaleProvider().height == 0f) {
             height = with
         }
-        if (sizeScale.width == 0f) {
+        if (sizeScaleProvider().width == 0f) {
             with = height
         }
 
 
-        val topLeft = Offset(x = size.width * topLeftScale.x, y = size.height * topLeftScale.y)
+        val topLeft = Offset(x = size.width * topLeftScaleProvider().x, y = size.height * topLeftScaleProvider().y)
 
 
         // 扫描框 矩形
@@ -295,9 +271,7 @@ fun ShowAfterCropImageToAnalysis(bitmap: Bitmap) {
     Image(bitmap = bitmap.asImageBitmap(), contentDescription = null,
         contentScale = ContentScale.FillWidth,
         modifier = Modifier
-            .padding(top = 60.dp)
             .fillMaxWidth()
-
             .drawWithContent {
                 drawContent()
 
@@ -309,88 +283,7 @@ fun ShowAfterCropImageToAnalysis(bitmap: Bitmap) {
                 )
             }
     )
-
-
 }
-
-
-@SuppressLint("UnsafeOptInUsageError")
-fun cropTextImage(imageProxy: ImageProxy): Bitmap? {
-    val mediaImage = imageProxy.image ?: return null
-
-    val rotationDegrees = imageProxy.imageInfo.rotationDegrees
-
-
-    val imageHeight = mediaImage.height
-    val imageWidth = mediaImage.width
-
-    val cropRect = when (rotationDegrees) {
-        //90, 270 -> getCropRect90(imageHeight.toFloat(), imageWidth.toFloat()).toAndroidRect()
-        //else -> getCropRect(imageHeight.toFloat(), imageWidth.toFloat()).toAndroidRect()
-        90, 270 -> getCropRect90(imageHeight.toFloat(), imageWidth.toFloat()).roundToAndroidRect()
-        else -> getCropRect(imageHeight.toFloat(), imageWidth.toFloat()).roundToAndroidRect()
-    }
-
-
-    //val convertImageToBitmap = ImageUtils.convertYuv420888ImageToBitmap(mediaImage)
-    val convertImageToBitmap = ImageUtils.convertJpegImageToBitmap(mediaImage)
-
-    val croppedBitmap =
-        ImageUtils.rotateAndCrop(convertImageToBitmap, rotationDegrees, cropRect)
-
-//        Log.d("===", "====================================")
-//        Log.d("mediaImage", "$rotationDegrees width-height: $imageWidth * $imageHeight")
-//        Log.d("cropRect", "$rotationDegrees width-height: ${cropRect.width()} * ${cropRect.height()}")
-//        Log.d("cropRect", "$rotationDegrees ltrb: $cropRect")
-//
-//        Log.d("convertImageToBitmap", "width-height: ${convertImageToBitmap.width} * ${convertImageToBitmap.height}")
-//        Log.d("croppedBitmap", "width-height: ${croppedBitmap.width} * ${croppedBitmap.height}")
-
-
-    return croppedBitmap
-
-}
-
-
-fun getCropRect(
-    surfaceHeight: Float,
-    surfaceWidth: Float,
-    topLeftScale: Offset = cropTopLeftScale,
-    sizeScale: Size = cropSizeScale,
-): Rect {
-
-    val height = surfaceHeight * sizeScale.height
-    val with = surfaceWidth * sizeScale.width
-    val topLeft = Offset(x = surfaceWidth * topLeftScale.x, y = surfaceHeight * topLeftScale.y)
-
-    return Rect(offset = topLeft, size = Size(with, height))
-
-}
-
-fun getCropRect90(
-    surfaceHeight: Float,
-    surfaceWidth: Float,
-    topLeftScale: Offset = Offset(x = cropTopLeftScale.y, y = cropTopLeftScale.x),
-    sizeScale: Size = Size(width = cropSizeScale.height, height = cropSizeScale.width),
-): Rect {
-
-    val height = surfaceHeight * sizeScale.height
-    val with = surfaceWidth * sizeScale.width
-    val topLeft = Offset(x = surfaceWidth * topLeftScale.x, y = surfaceHeight * topLeftScale.y)
-
-    return Rect(offset = topLeft, size = Size(with, height))
-
-}
-
-private fun Rect.roundToAndroidRect(): android.graphics.Rect {
-    return android.graphics.Rect(
-        left.roundToInt(),
-        top.roundToInt(),
-        right.roundToInt(),
-        bottom.roundToInt()
-    )
-}
-
 
 private suspend fun Context.getCameraProvider(): ProcessCameraProvider =
     suspendCoroutine { continuation ->
@@ -411,76 +304,5 @@ private suspend fun CameraControl.enableTorch(context: Context, torch: Boolean):
     }
 
 
-@androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
-fun ImageCapture.takePhoto(
-    filenameFormat: String = "yyyy-MM-dd-HH-mm-ss-SSS",
-    outputDirectory: File,
-    executor: Executor = Executors.newSingleThreadExecutor(),
-    onImageCaptured: (Uri) -> Unit,
-    onError: (ImageCaptureException) -> Unit
-) {
 
-    val photoFile = File(
-        outputDirectory,
-        SimpleDateFormat(filenameFormat, Locale.US).format(System.currentTimeMillis()) + ".jpg"
-    )
 
-    val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-
-    /*
-    takePicture(outputOptions, executor, object : ImageCapture.OnImageSavedCallback {
-        override fun onError(exception: ImageCaptureException) {
-            Log.e("kilo", "Take photo error:", exception)
-            onError(exception)
-        }
-
-        override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-            val savedUri = Uri.fromFile(photoFile)
-            onImageCaptured(savedUri)
-        }
-    })
-     */
-
-    takePicture(executor, object: ImageCapture.OnImageCapturedCallback() {
-        override fun  onCaptureSuccess(image: ImageProxy) {
-            if (image.image == null) {
-                image.close()
-                return
-            }
-
-            val bitmap = cropTextImage(image) ?: return
-            bitmap.saveToFile(photoFile)
-
-            onImageCaptured(
-                Uri.fromFile(photoFile)
-            )
-
-            image.close()
-        }
-
-        override fun onError(exception: ImageCaptureException) {
-            Log.e("kilo", "Take photo error:", exception)
-            onError(exception)
-        }
-    })
-}
-
-private fun Bitmap.saveToFile(file: File) {
-    var fos: FileOutputStream? = null
-
-    try {
-        fos = FileOutputStream(file);
-        this.compress(Bitmap.CompressFormat.JPEG, 100, fos);
-        fos.flush();
-    } catch (e: IOException) {
-        e.printStackTrace();
-    } finally {
-        try {
-            if (fos != null) {
-                fos.close();
-            }
-        } catch (e: IOException) {
-            e.printStackTrace();
-        }
-    }
-}

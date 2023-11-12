@@ -1,8 +1,6 @@
 package com.example.previewcrop
 
 import android.annotation.SuppressLint
-import android.content.ContentResolver
-import android.graphics.BitmapFactory
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -11,15 +9,16 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Highlight
 import androidx.compose.material.icons.outlined.Highlight
 import androidx.compose.material.icons.sharp.Lens
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -30,6 +29,7 @@ import com.example.previewcrop.ui.theme.PreviewCropTheme
 import com.example.previewcrop.utils.RequiredPermission
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import kotlinx.coroutines.launch
 
 
 /*
@@ -69,40 +69,43 @@ class MainActivity : ComponentActivity() {
 fun CameraExample() {
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     val viewModel = remember {
         val config = AspectRatioCameraConfig(context)
         val model = CameraViewModel(config)
-        model.analyze()
         model
     }
 
 
     Box(
-        contentAlignment = Alignment.TopCenter, modifier = Modifier
+        contentAlignment = Alignment.TopCenter,
+        modifier = Modifier
             .fillMaxSize()
     ) {
 
+        // Camera Preview
         CameraView(
             preview = viewModel.preview,
-            imageAnalysis = viewModel.imageAnalysis,
             imageCapture = viewModel.imageCapture,
-            enableTorch = viewModel.enableTorch.value,
+            enableTorchProvider = { viewModel.enableTorch.value },
             modifier = Modifier
                 .fillMaxSize()
         )
 
         // 裁剪区域
-        DrawCropScan()
+        DrawCropScan(
+            topLeftScaleProvider = { viewModel.cropTopLeftScale.value },
+            sizeScaleProvider = { viewModel.cropSizeScale.value }
+        )
 
-        // real bitmap for analysis after crop
-        //ShowAfterCropImageToAnalysis(viewModel.bitmapR.value)
+        // show cropped bitmap provided by taking picture
         if (viewModel.bitmapR.value != null) {
             ShowAfterCropImageToAnalysis(bitmap = viewModel.bitmapR.value!!)
         }
 
 
-        // show analysis result
+        // show recognized text
         Text(
             text = "${viewModel.scanText.value} \n ${viewModel.scanBarcode.value}",
             modifier = Modifier
@@ -139,25 +142,39 @@ fun CameraExample() {
 
 
 
+        // Take picture
         IconButton(
             modifier = Modifier
                 .padding(bottom = 40.dp)
                 .align(alignment = Alignment.BottomCenter),
             onClick = {
-                viewModel.imageCapture.takePhoto(
-                    outputDirectory = viewModel.getOutputDirectory(context),
-                    onError = {
+                scope.launch {
+                    viewModel.imageCapture.takePhoto(
+                        outputDirectory = viewModel.getOutputDirectory(context),
+                        onError = {
 
-                    },
-                    onImageCaptured = { cropedImageUri ->
+                        },
+                        cropTextImage = viewModel::cropTextImage,
+                        onImageCaptured = { cropedImageUri ->
+                            /*
                         viewModel.recognizeText(
                             context,
                             cropedImageUri,
                         ) {
 
                         }
-                    }
-                )
+
+                         */
+                        },
+                        onBitmapCropped = { bitmap ->
+                            viewModel.recognizeTextThroughBitmap(
+                                bitmap
+                            ) {
+
+                            }
+                        }
+                    )
+                }
             },
             content = {
                 Icon(
@@ -173,6 +190,26 @@ fun CameraExample() {
         )
 
 
-    }
 
+        // Resize cropBox
+        IconButton(
+            onClick = {
+                viewModel.cropSizeScale.value = viewModel.cropSizeScale.value.copy(height = 0.3f)
+            },
+            modifier = Modifier
+                .align(alignment = Alignment.BottomEnd)
+                .padding(bottom = 200.dp, end = 20.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = "enableTorch",
+                tint = Color.White,
+                modifier = Modifier
+                    .size(60.dp)
+                    .border(1.dp, Color.White, CircleShape)
+                    .padding(10.dp),
+            )
+        }
+
+    }
 }
