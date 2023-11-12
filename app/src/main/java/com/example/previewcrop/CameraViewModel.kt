@@ -3,9 +3,12 @@ package com.example.previewcrop
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.util.Log
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
@@ -56,8 +59,10 @@ class CameraViewModel(config: CameraConfig) : ViewModel() {
 
     var scanText = mutableStateOf("")
     var scanBarcode = mutableStateOf("")
+    var scanTextAtMoment = mutableStateOf("")
 
-    var bitmapR = mutableStateOf(Bitmap.createBitmap(10, 10, Bitmap.Config.RGB_565))
+    //var bitmapR = mutableStateOf(Bitmap.createBitmap(10, 10, Bitmap.Config.RGB_565))
+    var bitmapR = mutableStateOf<Bitmap?>(null)
 
     var enableTorch: MutableState<Boolean> = mutableStateOf(false)
 
@@ -70,6 +75,7 @@ class CameraViewModel(config: CameraConfig) : ViewModel() {
     fun analyze() {
 
         imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor()) { image ->
+            /*
             if (image.image == null) {
                 image.close()
                 return@setAnalyzer
@@ -125,10 +131,36 @@ class CameraViewModel(config: CameraConfig) : ViewModel() {
                 image.close()
             }
 
+             */
 
         }
 
+    }
 
+    fun recognizeText(
+        context: Context,
+        imageUri: Uri,
+        onTextRecognized: (String) -> Unit
+    ) {
+        val bitmap = BitmapFactory.decodeStream(context.contentResolver.openInputStream(imageUri))
+        val inputImageCrop = InputImage.fromBitmap(bitmap, 0)
+
+        textRecognizer.process(inputImageCrop)
+            .addOnSuccessListener {
+                val text = it.text
+
+                Log.d("zzz", "textRecognizer onSuccess")
+                Log.d("zzzzzz OCR result", "ocr result: $text")
+                bitmapR.value = bitmap
+                scanText.value = text
+
+                onTextRecognized(text)
+
+            }.addOnFailureListener {
+                Log.d("zzz", "onFailure")
+                bitmapR.value = bitmap
+                scanText.value = "onFailure"
+            }
     }
 
 

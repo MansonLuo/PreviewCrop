@@ -1,6 +1,8 @@
 package com.example.previewcrop
 
 import android.annotation.SuppressLint
+import android.content.ContentResolver
+import android.graphics.BitmapFactory
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -94,7 +96,10 @@ fun CameraExample() {
         DrawCropScan()
 
         // real bitmap for analysis after crop
-        ShowAfterCropImageToAnalysis(viewModel.bitmapR.value)
+        //ShowAfterCropImageToAnalysis(viewModel.bitmapR.value)
+        if (viewModel.bitmapR.value != null) {
+            ShowAfterCropImageToAnalysis(bitmap = viewModel.bitmapR.value!!)
+        }
 
 
         // show analysis result
@@ -144,8 +149,13 @@ fun CameraExample() {
                     onError = {
 
                     },
-                    onImageCaptured = {
+                    onImageCaptured = { cropedImageUri ->
+                        viewModel.recognizeText(
+                            context,
+                            cropedImageUri,
+                        ) {
 
+                        }
                     }
                 )
             },

@@ -42,12 +42,15 @@ import com.example.previewcrop.utils.PermissionView
 import com.example.previewcrop.utils.openSettingsPermission
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
+import kotlin.math.roundToInt
 
 
 /*
@@ -322,12 +325,15 @@ fun cropTextImage(imageProxy: ImageProxy): Bitmap? {
     val imageWidth = mediaImage.width
 
     val cropRect = when (rotationDegrees) {
-        90, 270 -> getCropRect90(imageHeight.toFloat(), imageWidth.toFloat()).toAndroidRect()
-        else -> getCropRect(imageHeight.toFloat(), imageWidth.toFloat()).toAndroidRect()
+        //90, 270 -> getCropRect90(imageHeight.toFloat(), imageWidth.toFloat()).toAndroidRect()
+        //else -> getCropRect(imageHeight.toFloat(), imageWidth.toFloat()).toAndroidRect()
+        90, 270 -> getCropRect90(imageHeight.toFloat(), imageWidth.toFloat()).roundToAndroidRect()
+        else -> getCropRect(imageHeight.toFloat(), imageWidth.toFloat()).roundToAndroidRect()
     }
 
 
-    val convertImageToBitmap = ImageUtils.convertYuv420888ImageToBitmap(mediaImage)
+    //val convertImageToBitmap = ImageUtils.convertYuv420888ImageToBitmap(mediaImage)
+    val convertImageToBitmap = ImageUtils.convertJpegImageToBitmap(mediaImage)
 
     val croppedBitmap =
         ImageUtils.rotateAndCrop(convertImageToBitmap, rotationDegrees, cropRect)
@@ -376,6 +382,15 @@ fun getCropRect90(
 
 }
 
+private fun Rect.roundToAndroidRect(): android.graphics.Rect {
+    return android.graphics.Rect(
+        left.roundToInt(),
+        top.roundToInt(),
+        right.roundToInt(),
+        bottom.roundToInt()
+    )
+}
+
 
 private suspend fun Context.getCameraProvider(): ProcessCameraProvider =
     suspendCoroutine { continuation ->
@@ -396,6 +411,7 @@ private suspend fun CameraControl.enableTorch(context: Context, torch: Boolean):
     }
 
 
+@androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
 fun ImageCapture.takePhoto(
     filenameFormat: String = "yyyy-MM-dd-HH-mm-ss-SSS",
     outputDirectory: File,
@@ -411,6 +427,7 @@ fun ImageCapture.takePhoto(
 
     val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
 
+    /*
     takePicture(outputOptions, executor, object : ImageCapture.OnImageSavedCallback {
         override fun onError(exception: ImageCaptureException) {
             Log.e("kilo", "Take photo error:", exception)
@@ -422,4 +439,48 @@ fun ImageCapture.takePhoto(
             onImageCaptured(savedUri)
         }
     })
+     */
+
+    takePicture(executor, object: ImageCapture.OnImageCapturedCallback() {
+        override fun  onCaptureSuccess(image: ImageProxy) {
+            if (image.image == null) {
+                image.close()
+                return
+            }
+
+            val bitmap = cropTextImage(image) ?: return
+            bitmap.saveToFile(photoFile)
+
+            onImageCaptured(
+                Uri.fromFile(photoFile)
+            )
+
+            image.close()
+        }
+
+        override fun onError(exception: ImageCaptureException) {
+            Log.e("kilo", "Take photo error:", exception)
+            onError(exception)
+        }
+    })
+}
+
+private fun Bitmap.saveToFile(file: File) {
+    var fos: FileOutputStream? = null
+
+    try {
+        fos = FileOutputStream(file);
+        this.compress(Bitmap.CompressFormat.JPEG, 100, fos);
+        fos.flush();
+    } catch (e: IOException) {
+        e.printStackTrace();
+    } finally {
+        try {
+            if (fos != null) {
+                fos.close();
+            }
+        } catch (e: IOException) {
+            e.printStackTrace();
+        }
+    }
 }

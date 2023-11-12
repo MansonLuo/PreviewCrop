@@ -8,6 +8,7 @@ package com.example.previewcrop.utils
  */
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
 import android.graphics.Matrix
 import android.graphics.Rect
@@ -19,6 +20,18 @@ import androidx.annotation.ColorInt
  */
 object ImageUtils {
     private val CHANNEL_RANGE = 0 until (1 shl 18)
+
+    fun convertJpegImageToBitmap(image: Image): Bitmap {
+        require(image.format == ImageFormat.JPEG) {
+            "Unsupported image format $(image.format)"
+        }
+
+        val buffer = image.planes[0].buffer
+        val bytes = ByteArray(buffer.remaining())
+        buffer.get(bytes)
+
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, null)
+    }
 
     fun convertYuv420888ImageToBitmap(image: Image): Bitmap {
         require(image.format == ImageFormat.YUV_420_888) {
@@ -110,3 +123,4 @@ object ImageUtils {
 private fun Byte.toIntUnsigned(): Int {
     return toInt() and 0xFF
 }
+
