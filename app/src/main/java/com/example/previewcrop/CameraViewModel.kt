@@ -3,45 +3,36 @@ package com.example.previewcrop
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.MediaStore
 import android.util.Log
 import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.example.previewcrop.utils.ImageUtils
-import com.example.previewcrop.utils.takeMyPhoto
+import com.example.previewcrop.utils.takePhotoAsync
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
-import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Locale
-import java.util.concurrent.Executor
-import java.util.concurrent.Executors
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 import kotlin.math.roundToInt
-import kotlin.reflect.KFunction1
 
 
 /*
@@ -78,83 +69,35 @@ class CameraViewModel(config: CameraConfig) : ViewModel() {
         enableTorch.value = !enableTorch.value
     }
 
+    // Refactory Start
+    @androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
+    suspend fun  takePictureAsync(
+        filenameFormat: String = "yyyy-MM-dd-HH-mm-ss-SSS",
+        outputDirectory: File,
+    ): Uri? {
+        val imageProxy = imageCapture.takePhotoAsync()
+        val photoFile = File(
+            outputDirectory,
+            SimpleDateFormat(filenameFormat, Locale.US).format(System.currentTimeMillis()) + ".jpg"
+        )
 
-    /*
-    @SuppressLint("UnsafeOptInUsageError")
-    fun analyze() {
+        if (imageProxy.image == null) {
+            imageProxy.close()
 
-        imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor()) { image ->
-            /*
-            if (image.image == null) {
-                image.close()
-                return@setAnalyzer
-            }
-
-            val mediaImage = image.image!!
-
-
-            val inputImage = InputImage.fromMediaImage(mediaImage, image.imageInfo.rotationDegrees)
-
-            val task = if (useOCR) {
-
-                // OCR 识别, 截取扫描框图片
-                val bitmap = cropTextImage(image) ?: return@setAnalyzer
-
-                val inputImageCrop = InputImage.fromBitmap(bitmap, 0)
-
-                textRecognizer.process(inputImageCrop)
-                    .addOnSuccessListener {
-                        val text = it.text
-
-                        Log.d("zzz", "textRecognizer onSuccess")
-                        Log.d("zzzzzz OCR result", "ocr result: $text")
-                        bitmapR.value = bitmap
-                        scanText.value = text
-
-                    }.addOnFailureListener {
-                        Log.d("zzz", "onFailure")
-                        bitmapR.value = bitmap
-                        scanText.value = "onFailure"
-                    }
-
-            } else {
-                barcodeScanner.process(inputImage)
-                    .addOnSuccessListener {
-                        Log.d("zzz", "barcodeScanner onSuccess")
-                        it.forEach { code ->
-                            val text = code.displayValue ?: ""
-                            text.isNotEmpty().apply {
-                                scanBarcode.value = text
-                            }
-                        }
-
-                    }.addOnFailureListener {
-                        Log.d("zzz", "onFailure")
-                        scanBarcode.value = "onFailure"
-
-                    }
-            }
-
-
-            task.addOnCompleteListener {
-                image.close()
-            }
-
-             */
-
+            return null
         }
 
-    }
+        val bitmap = cropTextImage(imageProxy) ?: return null
 
-     */
+        withContext(Dispatchers.IO) {
+            async {
+                bitmap.saveToFile(photoFile)
+            }
+        }
 
-    // Refactory Start
-    suspend fun takePictureAsync(context: Context): Uri? {
-        return imageCapture.takeMyPhoto(
-            scope = viewModelScope,
-            outputDirectory = getOutputDirectory(context = context),
-            cropTextImage = ::cropTextImage
-        )
+        imageProxy.close()
+
+        return Uri.fromFile(photoFile)
     }
 
     suspend fun recognizeTextAsync(
@@ -191,58 +134,7 @@ class CameraViewModel(config: CameraConfig) : ViewModel() {
 
     // Refactory End
 
-    fun recognizeText(
-        context: Context,
-        imageUri: Uri,
-        onTextRecognized: (String) -> Unit
-    ) {
-        val bitmap = BitmapFactory.decodeStream(context.contentResolver.openInputStream(imageUri))
-        val inputImageCrop = InputImage.fromBitmap(bitmap, 0)
-
-        textRecognizer.process(inputImageCrop)
-            .addOnSuccessListener {
-                val text = it.text
-
-                Log.d("zzz", "textRecognizer onSuccess")
-                Log.d("zzzzzz OCR result", "ocr result: $text")
-                bitmapR.value = bitmap
-                scanText.value = text
-
-                onTextRecognized(text)
-
-            }.addOnFailureListener {
-                Log.d("zzz", "onFailure")
-                bitmapR.value = bitmap
-                scanText.value = "onFailure"
-            }
-    }
-
-    fun recognizeTextThroughBitmap(
-        bitmap: Bitmap,
-        onTextRecognized: (String) -> Unit
-    ) {
-        val inputImageCrop = InputImage.fromBitmap(bitmap, 0)
-
-        textRecognizer.process(inputImageCrop)
-            .addOnSuccessListener {
-                val text = it.text
-
-                Log.d("zzz", "textRecognizer onSuccess")
-                Log.d("zzzzzz OCR result", "ocr result: $text")
-                bitmapR.value = bitmap
-                scanText.value = text
-
-                onTextRecognized(text)
-
-            }.addOnFailureListener {
-                Log.d("zzz", "onFailure")
-                bitmapR.value = bitmap
-                scanText.value = "onFailure"
-            }
-    }
-
-
-    private fun getOutputDirectory(context: Context): File {
+    fun getOutputDirectory(context: Context): File {
 
 
         val mediaDir = File(context.getExternalFilesDir(null), "image").apply {
@@ -343,56 +235,11 @@ class CameraViewModel(config: CameraConfig) : ViewModel() {
     }
 }
 
-
-@androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
-fun ImageCapture.takePhoto(
-    filenameFormat: String = "yyyy-MM-dd-HH-mm-ss-SSS",
-    outputDirectory: File,
-    executor: Executor = Executors.newSingleThreadExecutor(),
-    cropTextImage: KFunction1<ImageProxy, Bitmap?>,
-    onImageCaptured: (Uri) -> Unit,
-    onBitmapCropped: (bitmap: Bitmap) -> Unit,
-    onError: (ImageCaptureException) -> Unit
-) {
-
-    val photoFile = File(
-        outputDirectory,
-        SimpleDateFormat(filenameFormat, Locale.US).format(System.currentTimeMillis()) + ".jpg"
-    )
-
-    takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
-        override fun onCaptureSuccess(image: ImageProxy) {
-            if (image.image == null) {
-                image.close()
-                return
-            }
-
-            val bitmap = cropTextImage(image) ?: return
-            bitmap.saveToFile(photoFile)
-
-            onBitmapCropped(
-                bitmap
-            )
-
-            onImageCaptured(
-                Uri.fromFile(photoFile)
-            )
-
-            image.close()
-        }
-
-        override fun onError(exception: ImageCaptureException) {
-            Log.e("kilo", "Take photo error:", exception)
-            onError(exception)
-        }
-    })
-}
-
 private fun Bitmap.saveToFile(file: File) {
     var fos: FileOutputStream? = null
 
     try {
-        fos = FileOutputStream(file);
+        fos = FileOutputStream(file)
         this.compress(Bitmap.CompressFormat.JPEG, 100, fos);
         fos.flush();
     } catch (e: IOException) {

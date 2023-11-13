@@ -150,37 +150,13 @@ fun CameraExample() {
                 .padding(bottom = 40.dp)
                 .align(alignment = Alignment.BottomCenter),
             onClick = {
-                /*
                 scope.launch {
-                    viewModel.imageCapture.takePhoto(
-                        outputDirectory = viewModel.getOutputDirectory(context),
-                        onError = {
+                    val imageUri = async {
+                        viewModel.takePictureAsync(
+                            outputDirectory = viewModel.getOutputDirectory(context)
+                        )
+                    }.await()
 
-                        },
-                        cropTextImage = viewModel::cropTextImage,
-                        onImageCaptured = { cropedImageUri ->
-                            /*
-                        viewModel.recognizeText(
-                            context,
-                            cropedImageUri,
-                        ) {
-
-                        }
-
-                         */
-                        },
-                        onBitmapCropped = { bitmap ->
-                            viewModel.recognizeTextThroughBitmap(
-                                bitmap
-                            ) {
-
-                            }
-                        }
-                    )
-                }
-                 */
-                scope.launch {
-                    val imageUri = async {  viewModel.takePictureAsync(context) }.await()
                     if (imageUri != null) {
                         val scannedText = async {  viewModel.recognizeTextAsync(context, imageUri) }.await()
                         viewModel.updateRecognizedText(scannedText)
