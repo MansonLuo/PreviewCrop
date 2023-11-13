@@ -2,6 +2,7 @@ package com.example.previewcrop
 
 import android.annotation.SuppressLint
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -29,6 +30,7 @@ import com.example.previewcrop.ui.theme.PreviewCropTheme
 import com.example.previewcrop.utils.RequiredPermission
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 
@@ -178,9 +180,9 @@ fun CameraExample() {
                 }
                  */
                 scope.launch {
-                    val imageUri = viewModel.takePictureAsync(context)
+                    val imageUri = async {  viewModel.takePictureAsync(context) }.await()
                     if (imageUri != null) {
-                        val scannedText = viewModel.recognizeTextAsync(context, imageUri)
+                        val scannedText = async {  viewModel.recognizeTextAsync(context, imageUri) }.await()
                         viewModel.updateRecognizedText(scannedText)
                     }
                 }

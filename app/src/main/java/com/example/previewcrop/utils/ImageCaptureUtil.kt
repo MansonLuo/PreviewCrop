@@ -49,10 +49,7 @@ suspend fun ImageCapture.takeMyPhoto(
 
             val bitmap = cropTextImage(image) ?: return@createTakePictureCallback null
 
-            scope.launch {
-                saveBitmapToFile(bitmap, photoFile)
-            }
-
+            saveBitmapToFile(bitmap, photoFile)
 
             image.close()
 
@@ -77,27 +74,25 @@ private fun createTakePictureCallback(
     }
 }
 
-private suspend fun saveBitmapToFile(
+private fun saveBitmapToFile(
     bitmap: Bitmap,
     file: File
 ) {
-    withContext(Dispatchers.IO) {
-        var fos: FileOutputStream? = null
+    var fos: FileOutputStream? = null
 
+    try {
+        fos = FileOutputStream(file);
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fos);
+        fos.flush();
+    } catch (e: IOException) {
+        e.printStackTrace();
+    } finally {
         try {
-            fos = FileOutputStream(file);
-            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fos);
-            fos.flush();
+            if (fos != null) {
+                fos.close();
+            }
         } catch (e: IOException) {
             e.printStackTrace();
-        } finally {
-            try {
-                if (fos != null) {
-                    fos.close();
-                }
-            } catch (e: IOException) {
-                e.printStackTrace();
-            }
         }
     }
 }
