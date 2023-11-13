@@ -67,6 +67,9 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
+    debugImplementation("com.github.haroldadmin:WhatTheStack:1.0.0-alpha04")
+    implementation("com.github.haroldadmin:WhatTheStack:1.0.0-alpha04")
+
     // camerax
     implementation("androidx.camera:camera-camera2:1.2.3")
     implementation("androidx.camera:camera-lifecycle:1.2.3")
