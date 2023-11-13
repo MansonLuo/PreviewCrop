@@ -12,19 +12,19 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.previewcrop.utils.ImageUtils
-import com.google.mlkit.vision.barcode.BarcodeScanner
-import com.google.mlkit.vision.barcode.BarcodeScannerOptions
-import com.google.mlkit.vision.barcode.BarcodeScanning
-import com.google.mlkit.vision.barcode.common.Barcode
+import com.example.previewcrop.utils.takeMyPhoto
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -32,6 +32,9 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlin.coroutines.suspendCoroutine
 import kotlin.math.roundToInt
 import kotlin.reflect.KFunction1
 
@@ -59,23 +62,7 @@ class CameraViewModel(config: CameraConfig) : ViewModel() {
         ChineseTextRecognizerOptions.Builder().build()
     )
 
-    private val barcodeScanner: BarcodeScanner = BarcodeScanning.getClient(
-        BarcodeScannerOptions.Builder()
-            .setBarcodeFormats(Barcode.FORMAT_CODE_128, Barcode.FORMAT_QR_CODE).build()
-    )
-
-    private var useOCR = true
-
-//    private var enableAnalysis = true
-//
-//    // 重新识别
-//    fun analyzeReStart() {
-//        enableAnalysis = true
-//    }
-
-
     var scanText = mutableStateOf("")
-    var scanBarcode = mutableStateOf("")
 
     //var bitmapR = mutableStateOf(Bitmap.createBitmap(10, 10, Bitmap.Config.RGB_565))
     var bitmapR = mutableStateOf<Bitmap?>(null)
@@ -156,6 +143,47 @@ class CameraViewModel(config: CameraConfig) : ViewModel() {
 
      */
 
+    // Refactory Start
+    suspend fun takePictureAsync(context: Context): Uri? {
+        return imageCapture.takeMyPhoto(
+            scope = viewModelScope,
+            outputDirectory = getOutputDirectory(context = context),
+            cropTextImage = ::cropTextImage
+        )
+    }
+
+    suspend fun recognizeTextAsync(
+        context: Context,
+        imageUri: Uri
+    ): String = suspendCoroutine {  continuation ->
+
+        val bitmap = BitmapFactory.decodeStream(context.contentResolver.openInputStream(imageUri))
+        val inputImageCrop = InputImage.fromBitmap(bitmap, 0)
+
+        textRecognizer.process(inputImageCrop)
+            .addOnSuccessListener {
+                val text = it.text
+
+                Log.d("zzz", "textRecognizer onSuccess")
+                Log.d("zzzzzz OCR result", "ocr result: $text")
+                bitmapR.value = bitmap
+
+                continuation.resume(text)
+            }.addOnFailureListener { exception ->
+                Log.d("zzz", "onFailure")
+                bitmapR.value = bitmap
+                scanText.value = "onFailure"
+
+                continuation.resumeWithException(exception)
+            }
+    }
+
+    fun updateRecognizedText(newText: String) {
+        scanText.value = newText
+    }
+
+    // Refactory End
+
     fun recognizeText(
         context: Context,
         imageUri: Uri,
@@ -207,7 +235,7 @@ class CameraViewModel(config: CameraConfig) : ViewModel() {
     }
 
 
-    fun getOutputDirectory(context: Context): File {
+    private fun getOutputDirectory(context: Context): File {
 
 
         val mediaDir = File(context.getExternalFilesDir(null), "image").apply {
@@ -218,7 +246,7 @@ class CameraViewModel(config: CameraConfig) : ViewModel() {
     }
 
     @SuppressLint("UnsafeOptInUsageError")
-    fun cropTextImage(imageProxy: ImageProxy): Bitmap? {
+    private fun cropTextImage(imageProxy: ImageProxy): Bitmap? {
         val mediaImage = imageProxy.image ?: return null
 
         val rotationDegrees = imageProxy.imageInfo.rotationDegrees
@@ -234,11 +262,14 @@ class CameraViewModel(config: CameraConfig) : ViewModel() {
 
             // for imageCapture.onImageCapture, pass width, height
             90, 270 -> getCropRect90(
-                imageWidth.toFloat(),
-                imageHeight.toFloat()
+                imageHeight.toFloat(),
+                imageWidth.toFloat()
             ).roundToAndroidRect()
 
-            else -> getCropRect(imageWidth.toFloat(), imageHeight.toFloat()).roundToAndroidRect()
+            else -> getCropRect(
+                imageHeight.toFloat(),
+                imageWidth.toFloat()
+            ).roundToAndroidRect()
         }
 
 
@@ -262,7 +293,7 @@ class CameraViewModel(config: CameraConfig) : ViewModel() {
     }
 
 
-    fun getCropRect(
+    private fun getCropRect(
         surfaceHeight: Float,
         surfaceWidth: Float,
         topLeftScale: Offset = cropTopLeftScale.value,
@@ -277,7 +308,7 @@ class CameraViewModel(config: CameraConfig) : ViewModel() {
 
     }
 
-    fun getCropRect90(
+    private fun getCropRect90(
         surfaceHeight: Float,
         surfaceWidth: Float,
         topLeftScale: Offset = Offset(x = cropTopLeftScale.value.y, y = cropTopLeftScale.value.x),
@@ -321,22 +352,6 @@ fun ImageCapture.takePhoto(
         outputDirectory,
         SimpleDateFormat(filenameFormat, Locale.US).format(System.currentTimeMillis()) + ".jpg"
     )
-
-    val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
-
-    /*
-takePicture(outputOptions, executor, object : ImageCapture.OnImageSavedCallback {
-    override fun onError(exception: ImageCaptureException) {
-        Log.e("kilo", "Take photo error:", exception)
-        onError(exception)
-    }
-
-    override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
-        val savedUri = Uri.fromFile(photoFile)
-        onImageCaptured(savedUri)
-    }
-})
- */
 
     takePicture(executor, object : ImageCapture.OnImageCapturedCallback() {
         override fun onCaptureSuccess(image: ImageProxy) {

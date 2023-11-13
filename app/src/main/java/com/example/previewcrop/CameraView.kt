@@ -266,9 +266,11 @@ fun DrawCropScan(
 
 
 @Composable
-fun ShowAfterCropImageToAnalysis(bitmap: Bitmap) {
+fun ShowAfterCropImageToAnalysis(
+    bitmapProvider: () -> Bitmap
+) {
 
-    Image(bitmap = bitmap.asImageBitmap(), contentDescription = null,
+    Image(bitmap = bitmapProvider().asImageBitmap(), contentDescription = null,
         contentScale = ContentScale.FillWidth,
         modifier = Modifier
             .fillMaxWidth()

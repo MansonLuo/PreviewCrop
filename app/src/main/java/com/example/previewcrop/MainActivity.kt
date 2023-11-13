@@ -101,13 +101,13 @@ fun CameraExample() {
 
         // show cropped bitmap provided by taking picture
         if (viewModel.bitmapR.value != null) {
-            ShowAfterCropImageToAnalysis(bitmap = viewModel.bitmapR.value!!)
+            ShowAfterCropImageToAnalysis(bitmapProvider = { viewModel.bitmapR.value!! })
         }
 
 
         // show recognized text
         Text(
-            text = "${viewModel.scanText.value} \n ${viewModel.scanBarcode.value}",
+            text = viewModel.scanText.value,
             modifier = Modifier
                 .align(alignment = Alignment.BottomStart)
                 .padding(horizontal = 10.dp, vertical = 100.dp)
@@ -148,6 +148,7 @@ fun CameraExample() {
                 .padding(bottom = 40.dp)
                 .align(alignment = Alignment.BottomCenter),
             onClick = {
+                /*
                 scope.launch {
                     viewModel.imageCapture.takePhoto(
                         outputDirectory = viewModel.getOutputDirectory(context),
@@ -174,6 +175,14 @@ fun CameraExample() {
                             }
                         }
                     )
+                }
+                 */
+                scope.launch {
+                    val imageUri = viewModel.takePictureAsync(context)
+                    if (imageUri != null) {
+                        val scannedText = viewModel.recognizeTextAsync(context, imageUri)
+                        viewModel.updateRecognizedText(scannedText)
+                    }
                 }
             },
             content = {

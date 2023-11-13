@@ -81,6 +81,8 @@ object ImageUtils {
         imageRotationDegrees: Int,
         cropRect: Rect
     ): Bitmap {
+        Log.e("Main", "cropbox: w: ${cropRect.width()} h: ${cropRect.height()}")
+        Log.e("Main", "bitmap: width: ${bitmap.width} h: ${bitmap.height}")
         val matrix = Matrix()
         matrix.preRotate(imageRotationDegrees.toFloat())
         return Bitmap.createBitmap(

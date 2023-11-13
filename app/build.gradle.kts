@@ -78,7 +78,6 @@ dependencies {
 
 
     implementation("com.google.mlkit:text-recognition-chinese:16.0.0")
-    implementation("com.google.mlkit:barcode-scanning:17.2.0")
 
     implementation("androidx.compose.material:material-icons-extended:1.5.2")
 }
